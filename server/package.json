@@ -1,0 +1,15 @@
+{
+  "name": "waste-server",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "openai": "^6.1.0",
+    "cors": "^2.8.5"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
