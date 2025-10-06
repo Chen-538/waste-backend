@@ -1,20 +1,29 @@
-// server.js — Node/Express backend (Responses API, with decision/message)
+// server/server.js — Node/Express backend (Responses API, with decision/message)
 import express from "express";
 import OpenAI from "openai";
 import cors from "cors";
 
 const app = express();
+
+// 允許前端來源（建議只允許你的 GitHub Pages 網域）
+app.use(cors({
+  origin: [
+    "https://chen-538.github.io",   // 你的 Pages 網域（路徑不會出現在 Origin 裡）
+    "http://localhost:3000",        // 本機開發（可留可拿掉）
+  ],
+}));
+
 app.use(express.json({ limit: "15mb" }));
 
-// Allow CORS for GitHub Pages or other frontends.
-// ⚠️ 建議部署時把 origin 換成你的 Pages 網址以提高安全性。
-app.use(cors());
+// ✅ Render 健康檢查：必須回 200
+app.get("/healthz", (req, res) => res.status(200).send("ok"));
 
-// Optional: serve static files if you deploy this backend alone
+// Optional: 若單獨部署後端需要提供靜態檔案才留，否則可移除
 app.use(express.static("."));
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// 分類清單
 const CATEGORIES = [
   { name: "紙類", hints: ["paper","cardboard","newspaper","carton box","paper bag","copy paper"] },
   { name: "塑膠類", hints: ["plastic bottle","PET bottle","plastic container","plastic bag","plastic cup","food box"] },
@@ -117,5 +126,6 @@ app.post("/api/classify", async (req, res) => {
   }
 });
 
+// ✅ 重要：用 Render 的 PORT 並綁定 0.0.0.0（對外可連）
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API ready on http://localhost:${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`API ready on http://localhost:${PORT}`));
