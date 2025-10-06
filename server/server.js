@@ -1,29 +1,19 @@
-// server/server.js — Node/Express backend (Responses API, with decision/message)
+// server.js — 後端直連 OpenAI（金鑰只在伺服器）
 import express from "express";
 import OpenAI from "openai";
 import cors from "cors";
 
 const app = express();
-
-// 允許前端來源（建議只允許你的 GitHub Pages 網域）
-app.use(cors({
-  origin: [
-    "https://chen-538.github.io",   // 你的 Pages 網域（路徑不會出現在 Origin 裡）
-    "http://localhost:3000",        // 本機開發（可留可拿掉）
-  ],
-}));
-
 app.use(express.json({ limit: "15mb" }));
+app.use(cors());
 
-// ✅ Render 健康檢查：必須回 200
-app.get("/healthz", (req, res) => res.status(200).send("ok"));
-
-// Optional: 若單獨部署後端需要提供靜態檔案才留，否則可移除
-app.use(express.static("."));
+// ✅ Health check（Render 設定 Health Check Path = /healthz）
+app.get("/healthz", (req, res) => res.status(200).type("text/plain").send("ok"));
+// 也讓根路徑回 200（萬一 Health Check 設成 "/" 也能過）
+app.get("/", (req, res) => res.status(200).send("ok"));
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// 分類清單
 const CATEGORIES = [
   { name: "紙類", hints: ["paper","cardboard","newspaper","carton box","paper bag","copy paper"] },
   { name: "塑膠類", hints: ["plastic bottle","PET bottle","plastic container","plastic bag","plastic cup","food box"] },
@@ -44,16 +34,20 @@ const CATEGORIES = [
   { name: "建築廢料", hints: ["concrete","brick","tile","lumber"] },
 ];
 
-const CONF_STRONG = 0.75; // 75%
-const CONF_WEAK   = 0.45; // 45%
-
+// API：前端只傳 { image: dataURL }
 app.post("/api/classify", async (req, res) => {
   try {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: "missing image dataURL" });
 
-    const listText = CATEGORIES.map(c => `- ${c.name}: ${(c.hints||[]).join(", ")}`).join("\n");
-    const prompt = "You are a waste-sorting classifier. Given an image, choose the single best category from the list. Calibrate scores in [0,1], roughly summing to 1. Return JSON.";
+    const listText = CATEGORIES.map(c =>
+      `- ${c.name}: ${(c.hints || []).join(", ")}`
+    ).join("\n");
+
+    const prompt =
+      "You are a waste-sorting classifier. " +
+      "Given an image, choose the single best category from the list. " +
+      "Calibrate scores in [0,1], roughly summing to 1. Return JSON.";
 
     const r = await client.responses.create({
       model: "gpt-4o-mini",
@@ -96,36 +90,17 @@ app.post("/api/classify", async (req, res) => {
     });
 
     const text = r.output_text || r.output?.[0]?.content?.[0]?.text || r.text || "";
-    const parsed = JSON.parse(text);
-
-    let top = parsed?.top;
-    if (!top && Array.isArray(parsed?.scores) && parsed.scores.length) {
-      top = parsed.scores.slice().sort((a,b)=>b.score-a.score)[0];
-    }
-    top = top || { name: "未知", score: 0 };
-    const scores = parsed?.scores || [];
-
-    const pct = Math.round((top.score || 0) * 100);
-    let message = "";
-    let decision = "uncertain";
-    if (top.score >= CONF_STRONG) {
-      message = `就是（${top.name}）`;
-      decision = "certain";
-    } else if (top.score >= CONF_WEAK) {
-      message = `較可能（${pct}%）是（${top.name}）`;
-      decision = "likely";
-    } else {
-      message = `不確定（最高 ${pct}%）`;
-      decision = "uncertain";
-    }
-
-    res.json({ top, scores, message, decision, threshold: { strong: CONF_STRONG, weak: CONF_WEAK } });
+    const data = JSON.parse(text);
+    res.json(data);
   } catch (err) {
     console.error("classify error:", err);
     res.status(500).json({ error: String(err?.message || err) });
   }
 });
 
-// ✅ 重要：用 Render 的 PORT 並綁定 0.0.0.0（對外可連）
+// （可選）若這個服務不是用來直接跑前端頁面，這行建議移除：
+// app.use(express.static("."));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`API ready on http://localhost:${PORT}`));
+// ✅ 明確綁 0.0.0.0
+app.listen(PORT, "0.0.0.0", () => console.log(`API ready on :${PORT}`));
