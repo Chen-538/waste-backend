@@ -48,6 +48,7 @@
     .leaf{position:absolute; width:16px; height:16px; background:radial-gradient(circle at 30% 30%, #86efac, #22c55e); border-radius:2px 12px 2px 12px; opacity:.15; transform:rotate(45deg)}
     @keyframes floatY{0%{transform:translateY(0) rotate(45deg)} 100%{transform:translateY(-120vh) rotate(135deg)}}
     @media (prefers-reduced-motion: reduce){ .leaf{display:none} }
+    .meta{margin-top:8px; text-align:center; color:var(--muted); font-size:12px}
   </style>
 </head>
 <body>
@@ -74,6 +75,7 @@
 
       <div class="progress"><div id="bar" class="bar"></div></div>
       <div id="status" class="small">等待上傳蔬菜照片…</div>
+      <div id="meta" class="meta">後端：<span id="backendUrl">—</span>｜模式：<span id="modeLabel">veg</span></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -82,8 +84,9 @@
   </div>
 
 <script>
-  // ===== 後端 API（直接走蔬菜路由，避免混線）
+  // ===== 後端 API（固定蔬菜路由，避免混線）
   const API_URL = "https://waste-backend-61ec.onrender.com/api/classify-veg";
+  document.getElementById('backendUrl').textContent = API_URL;
 
   // ===== 背景落葉 =====
   const leaves = document.getElementById('leaves');
@@ -108,6 +111,7 @@
     status:      document.getElementById('status'),
     bar:         document.getElementById('bar'),
     resultLine:  document.getElementById('resultLine'),
+    modeLabel:   document.getElementById('modeLabel'),
   };
 
   function setProgress(p){ els.bar.style.width = `${Math.max(0, Math.min(100, p))}%`; }
@@ -168,26 +172,61 @@
   ['dragleave','drop'].forEach(evt=> els.drop.addEventListener(evt, (e)=>{ e.preventDefault(); els.drop.classList.remove('drag'); }));
   els.drop.addEventListener('drop', (e)=>{ const f=e.dataTransfer.files?.[0]; if(f) setPreviewFromFile(f); });
 
-  // 白名單（防舊標籤）
-  const VEG_NAMES = ["高麗菜","大白菜","青江菜","小白菜/油菜","芥藍","菠菜","萵苣/生菜","蘿蔓",
-  "芹菜","韭菜","香菜","九層塔","紅蘿蔔","白蘿蔔","馬鈴薯","地瓜/蕃薯","洋蔥","青蔥","蒜頭","薑",
-  "番茄","茄子","小黃瓜/胡瓜","櫛瓜","青椒/甜椒/彩椒","辣椒","花椰菜（白）","綠花椰（西蘭花）",
-  "玉米","蘆筍","冬瓜","絲瓜","苦瓜","南瓜","櫛瓜南瓜（北海道南瓜）","四季豆","豌豆/荷蘭豆",
-  "竹筍","洋菇","香菇","杏鮑菇","金針菇","鴻禧菇","木耳","非蔬菜／不確定"];
+  // ===== 前端白名單（預設一份，並於啟動時自動向後端同步最新清單） =====
+  let VEG_NAMES = [
+    "高麗菜","大白菜","青江菜","小白菜/油菜","芥藍","芥菜","雪裡紅","塌棵菜","油麥菜/A菜","結球萵苣/美生菜",
+    "奶油萵苣","紫萵苣","蘿蔓","苦苣","菊苣","芝麻葉","水菜","茼蒿","紫甘藍","抱子甘藍",
+    "菠菜","紅鳳菜","皇宮菜/胭脂菜","空心菜/蕹菜","地瓜葉","甜菜葉","羽衣甘藍","黑葉羽衣甘藍","羅馬花椰菜","芥菜頭/大頭菜",
+    "萵筍/莴笋","豆苗/豌豆苗","苜蓿芽","向日葵芽","蘿蔔苗","西蘭花苗","馬齒莧/長命菜","水芹/野芹","西洋菜/豆瓣菜","香椿芽",
+    "紅蘿蔔","白蘿蔔","青蘿蔔","紫長蘿蔔","紅心蘿蔔/西瓜蘿蔔","黑蘿蔔","甜菜根","歐防風","蕪菁/蔓菁","蕪菁葉",
+    "蓮藕","藕帶","牛蒡","芋頭","小芋/芋艿","山藥/淮山","菊芋/洋薑","荸薺/馬蹄","芋梗","芹菜根/塊根芹",
+    "茴香球莖","薑","蒜頭","薑黃根","山葵根","牛蒡葉","甜菜根葉","紫地瓜","黃地瓜","新馬鈴薯",
+    "洋蔥","紫洋蔥","青蔥","大蔥/韭蔥","紅蔥頭/青蔥頭","蒜苗","蒜薹","香葱","藠頭/蕎頭","韭菜",
+    "韭黃","韭菜花","韭菜苔","分蔥","洋蔥苗","指狀馬鈴薯","紫皮馬鈴薯","小洋蔥/珠蔥","青蒜","蔥白",
+    "小黃瓜/胡瓜","日本小黃瓜","蛇瓜","佛手瓜/合掌瓜","龍鬚菜","蒲瓜/瓠瓜","節瓜/毛瓜","冬瓜","絲瓜","南瓜",
+    "栗子南瓜","橡實南瓜","胡桃南瓜","金絲瓜","櫛瓜","黃西葫蘆","金針菜","秋葵","苦瓜","白玉苦瓜",
+    "南瓜花","西瓜嫩葉","合掌瓜嫩梢","水蓮","豆薯/涼薯","朝鮮薊","茭白筍/菰筍","玉米","玉米筍","竹筍",
+    "綠竹筍","麻竹筍","冬筍","春筍","蘆筍","綠蘆筍","白蘆筍","紫蘆筍",
+    "番茄","小番茄/聖女番茄","牛番茄","羅馬番茄","彩虹番茄混合","茄子","日本長茄","圓茄","白茄","青椒/甜椒/彩椒",
+    "紅甜椒","黃甜椒","綠甜椒","橙甜椒","辣椒","朝天椒","小米椒","青龍椒","墨西哥辣椒/哈拉佩紐","牛角椒/羊角椒",
+    "甜椒粉椒","虎皮青椒","黃燈籠椒","卡宴辣椒","甜香蕉椒","匈牙利黃辣椒","哈瓦那辣椒","阿納罕椒","普布拉諾椒",
+    "四季豆","菜豆","長豆/豇豆","扁豆","刀豆","皇帝豆/利馬豆","蠶豆","毛豆/枝豆","黑豆嫩莢","豌豆/荷蘭豆",
+    "雪豆","甜豆/翠玉豆","綠豆芽","黃豆芽","黑豆芽","豌豆尖","菜心","芥藍花","油菜苔","龍鬚菜梗",
+    "九層塔","甜羅勒","紫蘇/赤紫蘇","迷迭香","百里香","鼠尾草","牛至","蒔蘿","茴香葉","香茅",
+    "洋菇","褐蘑菇/克里米尼","口蘑/波特菇","香菇","杏鮑菇","秀珍菇/平菇","金針菇","鴻禧菇","雪白菇","木耳",
+    "銀耳/雪耳","舞菇","牛肝菌","珊瑚菇","馬蘭頭","過貓","山蘇","冰花/冰菜","大陸妹",
+    "其他蔬菜／待擴充","非蔬菜／不確定"
+  ];
+
+  // 啟動時動態同步白名單（若失敗則用預設）
+  (async ()=>{
+    try{
+      const r = await fetch("https://waste-backend-61ec.onrender.com/api/debug-categories?mode=veg", { cache:"no-store" });
+      if (r.ok){
+        const d = await r.json();
+        if (Array.isArray(d.names) && d.names.length) VEG_NAMES = d.names;
+      }
+    }catch(e){ /* 忽略，使用預設白名單 */ }
+  })();
 
   function sanitizeTop(top){
-    return (!top || !VEG_NAMES.includes(top.name)) ? { name:"非蔬菜／不確定", score:0 } : top;
+    // 防止舊垃圾標籤混入：不在白名單 → 改為「非蔬菜／不確定」（保留 raw_guess 不變）
+    if (!top || !VEG_NAMES.includes(top.name)) {
+      return { name:"非蔬菜／不確定", score:0, raw_guess: top?.raw_guess };
+    }
+    return top;
   }
 
-  // 顯示結果
-  function setResult(name, score){
+  // 顯示結果（支援 raw_guess）
+  function setResult(name, score, rawGuess){
     const p = Math.round((score||0)*100);
+    const tip = (name === "其他蔬菜／待擴充" && rawGuess) ? `（可能是：<b>${rawGuess}</b>）` : "";
     if (score >= 0.75) {
-      els.resultLine.innerHTML = `輸出：就是（<b>${name||'未知'}</b>）`;
+      els.resultLine.innerHTML = `輸出：就是（<b>${name||'未知'}</b>）${tip}`;
     } else if (score >= 0.45) {
-      els.resultLine.innerHTML = `輸出：較可能（${p}%）是（<b>${name||'未知'}</b>）`;
+      els.resultLine.innerHTML = `輸出：較可能（${p}%）是（<b>${name||'未知'}</b>）${tip}`;
     } else {
-      els.resultLine.innerHTML = `輸出：<span class="small">不確定（最高 ${p}%）</span>`;
+      els.resultLine.innerHTML = `輸出：<span class="small">不確定（最高 ${p}%）</span> ${tip}`;
     }
   }
   function setUncertain(msg){ els.resultLine.innerHTML = `輸出：<span class="small">${msg}</span>`; }
@@ -208,8 +247,11 @@
 
       els.status.textContent='分析中…'; setProgress(60);
       const data = await resp.json();
+      if (data?.mode) els.modeLabel.textContent = data.mode;
+
+      // 後端已做白名單；前端再做一次保底，避免任何混線
       const top = sanitizeTop(data.top || data);
-      setResult(top.name, top.score);
+      setResult(top.name, top.score, top.raw_guess);
 
       els.status.textContent='完成'; setTimeout(()=> setProgress(0), 900);
     }catch(err){
