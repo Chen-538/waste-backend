@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>環保辨識器</title>
-  <meta name="description" content="請拍照或上傳圖片，他是一個幫你辨別你可能不清楚他在環保是甚麼分類的網站!。" />
+  <title>蔬菜辨識器</title>
+  <meta name="description" content="拍照或上傳蔬菜的照片，幫你辨識是哪一種蔬菜（高麗菜、青江菜、番茄、馬鈴薯…）。" />
   <style>
     /* ====== Theme ====== */
     :root{
@@ -75,12 +75,12 @@
   <div class="leaves" id="leaves"></div>
 
   <div class="container" style="position:relative; z-index:1">
-    <h1 class="center">環保辨識器</h1>
-    <div class="subtitle">請拍照或上傳你的圖片!</div>
+    <h1 class="center">蔬菜辨識器</h1>
+    <div class="subtitle">請拍照或上傳蔬菜的照片（光線充足、背景簡單，效果更好）</div>
 
     <div class="card stack center">
       <div id="drop" class="drop" aria-label="上傳區">
-        <!-- ✅ 兩個 input：相簿(無 capture) + 相機(有 capture) -->
+        <!-- 相簿 / 相機 -->
         <input id="fileGallery" type="file" accept="image/*" style="display:none" />
         <input id="fileCamera"  type="file" accept="image/*" capture="environment" style="display:none" />
 
@@ -92,12 +92,12 @@
       <div class="row">
         <button id="btnGallery" class="btn ghost" type="button">相簿</button>
         <button id="btnCamera"  class="btn ghost" type="button">拍照</button>
-        <button id="clear" class="btn warn" type="button">刪除</button>
-        <button id="run" class="btn" disabled>辨識</button>
+        <button id="clear" class="btn warn" type="button">清除</button>
+        <button id="run" class="btn" disabled>辨識蔬菜</button>
       </div>
 
       <div class="progress"><div id="bar" class="bar"></div></div>
-      <div id="status" class="small">等待上傳圖片…</div>
+      <div id="status" class="small">等待上傳蔬菜照片…</div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -107,7 +107,7 @@
 
 <script>
   // ====== 後端 API ======
-  const API_URL = "https://waste-backend-61ec.onrender.com/api/classify"; // ← 換成你的
+  const API_URL = "https://waste-backend-61ec.onrender.com/api/classify"; // ← 仍用你的後端路徑（已改為蔬菜分類）
 
   // ====== 背景落葉 ======
   const leaves = document.getElementById('leaves');
@@ -147,7 +147,7 @@
     e.currentTarget.appendChild(s); setTimeout(()=>s.remove(), 800);
   }
 
-  // 讀檔並壓縮成 DataURL
+  // 圖片壓縮成 DataURL（加速上傳）
   function compressImage(file, maxSide = 1280, quality = 0.85) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -161,7 +161,7 @@
         canvas.toBlob(blob => {
           if (!blob) return reject(new Error('toBlob failed'));
           const fr = new FileReader();
-          fr.onload = () => resolve(fr.result); // DataURL
+          fr.onload = () => resolve(fr.result);
           fr.readAsDataURL(blob);
         }, 'image/jpeg', quality);
       };
@@ -176,13 +176,12 @@
     if(!file) return;
     const url = URL.createObjectURL(file);
     showPreview(url);
-    // 壓縮存成 DataURL，再送去後端
     currentDataURL = await compressImage(file, 1280, 0.85);
     els.run.disabled = false;
-    els.status.textContent='圖片就緒，按「辨識」';
+    els.status.textContent='圖片就緒，按「辨識蔬菜」';
   }
 
-  // ====== 按鈕/輸入事件 ======
+  // 按鈕/輸入事件
   els.btnGallery.addEventListener('click', (e)=>{ ripple(e); els.fileGallery.click(); });
   els.btnCamera.addEventListener('click',  (e)=>{ ripple(e); els.fileCamera.click();  });
   els.clear.addEventListener('click',     (e)=>{ ripple(e); currentDataURL=null; clearPreview(); els.status.textContent='已清除圖片'; });
@@ -208,7 +207,7 @@
   }
   function setUncertain(msg){ els.resultLine.innerHTML = `輸出：<span class="small">${msg}</span>`; }
 
-  // ====== 呼叫後端 ======
+  // 呼叫後端
   els.run.addEventListener('click', async (e)=>{
     ripple(e);
     try{
@@ -224,7 +223,7 @@
 
       els.status.textContent='分析中…'; setProgress(60);
       const data = await resp.json();
-      const top = data.top || data; // {top:{name,score}} 或直接 {name,score}
+      const top = data.top || data;
       setResult(top.name, top.score);
 
       els.status.textContent='完成'; setTimeout(()=> setProgress(0), 900);
