@@ -1,4 +1,4 @@
-// server.js — 蔬菜辨識器（後端直連 OpenAI；金鑰只在伺服器）
+// server.js — 蔬菜辨識器（後端直連 OpenAI；金鑰只在伺服器.）
 import express from "express";
 import OpenAI from "openai";
 import cors from "cors";
