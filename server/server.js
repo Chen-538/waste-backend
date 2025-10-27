@@ -1,4 +1,4 @@
-// server.js — 雙模式＆擴充版（含：清單外 → 其他蔬菜／待擴充 + raw_guess）
+// server.js — 雙模式＆擴充版（清單外 → 其他蔬菜／待擴充 + raw_guess，strict JSON Schema）
 import express from "express";
 import OpenAI from "openai";
 import cors from "cors";
@@ -12,9 +12,10 @@ app.get("/healthz", (req, res) => res.status(200).type("text/plain").send("ok"))
 app.get("/", (req, res) => res.status(200).send("ok"));
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini"; // 需要更聰明可改成 "gpt-4o" 或 "o4-mini"
+// 想更準：把環境變數 OPENAI_MODEL 設成 "gpt-4o" 或 "o4-mini"
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-// ===== 清單：垃圾分類（保留舊功能用）
+// ===== 清單：垃圾分類（保留舊功能） =====
 const WASTE = [
   { name: "紙類", hints: ["paper","cardboard","newspaper","carton box","paper bag","copy paper"] },
   { name: "塑膠類", hints: ["plastic bottle","PET bottle","plastic container","plastic bag","plastic cup","food box"] },
@@ -35,7 +36,7 @@ const WASTE = [
   { name: "建築廢料", hints: ["concrete","brick","tile","lumber"] },
 ];
 
-// ===== 清單：蔬菜（200 標籤，盡量常見；+2 保底） =====
+// ===== 清單：蔬菜（≈200 標籤，+2 保底） =====
 const VEG = [
   // 01–20｜葉菜類（萵苣/甘藍/芥菜族）
   { name: "高麗菜", hints: ["cabbage","head cabbage","包心菜"] },
@@ -263,7 +264,7 @@ const VEG = [
   { name: "冰花/冰菜", hints: ["ice plant"] },
   { name: "大陸妹", hints: ["romaine (local name)"] },
 
-  // 保底（不列入 200 種計數，但固定保留）
+  // 保底（不列入 200 計數）
   { name: "其他蔬菜／待擴充", hints: ["other vegetable","unlisted veggie"] },
   { name: "非蔬菜／不確定", hints: ["not a vegetable","uncertain","background/packaging"] },
 ];
@@ -286,8 +287,9 @@ async function classifyImage({ image, list, domain }) {
 Given one photo, select the SINGLE best vegetable from the list.
 Rules:
 - The "top.name" MUST be EXACTLY one of the Chinese names in the list below. Do NOT invent new labels.
+- Always include "top.raw_guess". If the vegetable IS in the list, set top.raw_guess = "" (empty string).
 - If you believe it's a vegetable NOT in the list, set top.name = "其他蔬菜／待擴充" AND set top.raw_guess = your best guess (Chinese if possible).
-- If it's not a vegetable or too ambiguous, set top.name = "非蔬菜／不確定" with a low score.
+- If it's not a vegetable or too ambiguous, set top.name = "非蔬菜／不確定" with a low score and top.raw_guess = "".
 - Focus on raw produce; ignore plates, packaging, background, hands, table.
 - Calibrate top.score in [0,1]. Higher = more confident.
 
@@ -295,6 +297,7 @@ Vegetable categories with hints:
 ${listText}`
     : `You are a waste-sorting classifier.
 Choose ONE best category from the list (Chinese names). Calibrate score in [0,1].
+- Always include "top.raw_guess" as "" (empty string).
 Categories with hints:
 ${listText}`;
 
@@ -320,9 +323,10 @@ ${listText}`;
               properties: {
                 name: { type: "string" },
                 score: { type: "number" },
-                raw_guess: { type: "string" } // 只有蔬菜模式會用到（可選）
+                raw_guess: { type: "string" } // 一律回傳
               },
-              required: ["name","score"],
+              // ★ strict 模式：三個都必填
+              required: ["name","score","raw_guess"],
               additionalProperties: false
             }
           },
@@ -337,7 +341,7 @@ ${listText}`;
   const text = r.output_text || r.output?.[0]?.content?.[0]?.text || r.text || "";
   let data;
   try { data = JSON.parse(text); }
-  catch { data = { top: { name: domain === "veg" ? "非蔬菜／不確定" : "不確定", score: 0 } }; }
+  catch { data = { top: { name: domain === "veg" ? "非蔬菜／不確定" : "不確定", score: 0, raw_guess: "" } }; }
 
   // 落地白名單／保底處理
   const NAMES = new Set(list.map(x => x.name));
@@ -346,8 +350,11 @@ ${listText}`;
       const guess = data?.top?.raw_guess || data?.top?.name || "";
       data.top = { name: "其他蔬菜／待擴充", score: 0, raw_guess: guess };
     } else {
-      data.top = { name: "不確定", score: 0 };
+      data.top = { name: "不確定", score: 0, raw_guess: "" };
     }
+  } else {
+    // 清單內確保 raw_guess 至少是空字串
+    if (typeof data.top.raw_guess !== "string") data.top.raw_guess = "";
   }
   return data;
 }
@@ -366,6 +373,7 @@ app.post("/api/classify", async (req, res) => {
   }
 });
 
+// 明確的蔬菜路由（前端建議打這個）
 app.post("/api/classify-veg", async (req, res) => {
   try {
     const { image } = req.body;
@@ -379,6 +387,7 @@ app.post("/api/classify-veg", async (req, res) => {
   }
 });
 
+// 垃圾路由（保留舊功能）
 app.post("/api/classify-waste", async (req, res) => {
   try {
     const { image } = req.body;
